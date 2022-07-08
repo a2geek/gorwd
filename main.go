@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/a2geek/gorwd/rwd"
+	"github.com/gobwas/glob"
 	flags "github.com/jessevdk/go-flags"
 )
 
@@ -35,6 +36,19 @@ func main() {
 		panic(errors.New("Only support list at this time"))
 	}
 
+	var globs []glob.Glob
+	for _, globPattern := range options.Args.Glob {
+		glob, err := glob.Compile(globPattern)
+		if err != nil {
+			panic(err)
+		}
+		globs = append(globs, glob)
+	}
+	if len(globs) == 0 {
+		defaultGlob := glob.MustCompile("*")
+		globs = append(globs, defaultGlob)
+	}
+
 	f, err := rwd.New(options.Filename)
 	if err != nil {
 		panic(err)
@@ -47,6 +61,10 @@ func main() {
 	}
 
 	for i, entry := range *entries {
-		fmt.Printf("%3d. %s (o=%d, l=%d)\n", i+1, entry.Filename, entry.Offset, entry.Length)
+		for _, glob := range globs {
+			if glob.Match(entry.Filename) {
+				fmt.Printf("%3d. %s (o=%d, l=%d)\n", i+1, entry.Filename, entry.Offset, entry.Length)
+			}
+		}
 	}
 }
