@@ -1,5 +1,6 @@
 package rwd
 
+// Header is the known definition for the RDW starting sequence.
 type Header struct {
 	Magic [4]byte
 	// 3 int32 with 2,3,2

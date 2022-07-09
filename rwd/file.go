@@ -89,6 +89,7 @@ func (r *File) List() (*[]Entry, error) {
 		}
 
 		entry := Entry{
+			rwdFile:  r,
 			Filename: sb.String(),
 			Offset:   data[0],
 			Length:   data[2],
