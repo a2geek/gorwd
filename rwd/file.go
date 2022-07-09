@@ -3,7 +3,9 @@ package rwd
 import (
 	"encoding/binary"
 	"io"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -48,7 +50,7 @@ func (r *File) Trailer() (*Trailer, error) {
 }
 
 // List will read a list of all Files from the RWD file.
-func (r *File) List() (*[]Entry, error) {
+func (r *File) List() ([]*Entry, error) {
 	trailer, err := r.Trailer()
 	if err != nil {
 		return nil, err
@@ -65,36 +67,147 @@ func (r *File) List() (*[]Entry, error) {
 		return nil, err
 	}
 
-	files := []Entry{}
+	files := []*Entry{}
 	for i := 0; i < int(numberOfFiles); i++ {
-		var fileNameLength int16
-		err = binary.Read(r.file, binary.LittleEndian, &fileNameLength)
+		entry, err := r.readEntry()
 		if err != nil {
 			return nil, err
-		}
-		var fileNameRune = make([]int16, fileNameLength)
-		err = binary.Read(r.file, binary.LittleEndian, &fileNameRune)
-		if err != nil {
-			return nil, err
-		}
-		sb := strings.Builder{}
-		for _, ch := range fileNameRune {
-			sb.WriteRune(rune(ch))
-		}
-
-		data := [6]int32{}
-		err = binary.Read(r.file, binary.LittleEndian, &data)
-		if err != nil {
-			return nil, err
-		}
-
-		entry := Entry{
-			rwdFile:  r,
-			Filename: sb.String(),
-			Offset:   data[0],
-			Length:   data[2],
 		}
 		files = append(files, entry)
 	}
-	return &files, err
+	return files, err
+}
+
+func (r *File) readEntry() (*Entry, error) {
+	var fileNameLength int16
+	err := binary.Read(r.file, binary.LittleEndian, &fileNameLength)
+	if err != nil {
+		return nil, err
+	}
+	var fileNameRune = make([]int16, fileNameLength)
+	err = binary.Read(r.file, binary.LittleEndian, &fileNameRune)
+	if err != nil {
+		return nil, err
+	}
+	sb := strings.Builder{}
+	for _, ch := range fileNameRune {
+		sb.WriteRune(rune(ch))
+	}
+
+	data := [6]int32{}
+	err = binary.Read(r.file, binary.LittleEndian, &data)
+	if err != nil {
+		return nil, err
+	}
+
+	entry := Entry{
+		rwdFile:  r,
+		Filename: sb.String(),
+		Offset:   data[0],
+		Length:   data[2],
+	}
+	return &entry, nil
+}
+
+// Save will save this (modified) RWD archive back to disk.
+func (r *File) Save() error {
+	dir, _ := filepath.Split(r.file.Name())
+	newf, err := ioutil.TempFile(dir, "rwd-")
+	if err != nil {
+		return err
+	}
+	defer newf.Close()
+
+	header, err := r.Header()
+	if err != nil {
+		return err
+	}
+	headerLength := binary.Size(header)
+
+	entries, err := r.List()
+	if err != nil {
+		return err
+	}
+
+	trailer, err := r.Trailer()
+	if err != nil {
+		return err
+	}
+
+	err = binary.Write(newf, binary.LittleEndian, header)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		offset, err := newf.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return err
+		}
+
+		length, err := entry.WriteTo(newf)
+		if err != nil {
+			return err
+		}
+
+		// Don't want to change settings until _after_ content is saved
+		entry.Offset = int32(int(offset) - headerLength)
+		entry.Length = int32(length)
+	}
+
+	var numberOfFiles int32 = int32(len(entries))
+	err = binary.Write(newf, binary.LittleEndian, &numberOfFiles)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		err = r.writeEntry(newf, entry)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = binary.Write(newf, binary.LittleEndian, trailer)
+	if err != nil {
+		return err
+	}
+
+	err = r.Close()
+	if err != nil {
+		return err
+	}
+
+	err = os.Rename(r.file.Name(), r.file.Name()+".bak")
+	if err != nil {
+		return err
+	}
+
+	err = newf.Close()
+	if err != nil {
+		return err
+	}
+
+	return os.Rename(newf.Name(), r.file.Name())
+}
+
+func (r *File) writeEntry(f *os.File, entry *Entry) error {
+	var fileNameLength int16 = int16(len(entry.Filename))
+	err := binary.Write(f, binary.LittleEndian, &fileNameLength)
+	if err != nil {
+		return err
+	}
+	var fileNameRune = make([]int16, fileNameLength)
+	for i, ch := range entry.Filename {
+		fileNameRune[i] = int16(ch)
+	}
+	err = binary.Write(f, binary.LittleEndian, &fileNameRune)
+	if err != nil {
+		return err
+	}
+
+	data := [6]int32{}
+	data[0] = entry.Offset
+	data[2] = entry.Length
+	return binary.Write(f, binary.LittleEndian, &data)
 }

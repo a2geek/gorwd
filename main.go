@@ -17,6 +17,7 @@ func main() {
 			List    bool `short:"l" long:"list" description:"List contents of file"`
 			Extract bool `short:"x" long:"extract" description:"Extract files"`
 			Pipe    bool `short:"p" long:"pipe" description:"Pipe files to stdout"`
+			Update  bool `short:"u" long:"update" description:"Update file in archive"`
 		} `group:"Commands" required:"true"`
 
 		Filename  string `short:"f" long:"file" env:"GORWD_FILENAME" description:"File to process"`
@@ -36,7 +37,7 @@ func main() {
 	}
 
 	// This is terrible but not grokking a better way for mutually exclusive options
-	if countBools(options.Commands.Pipe, options.Commands.Extract, options.Commands.List) != 1 {
+	if countBools(options.Commands.Pipe, options.Commands.Extract, options.Commands.List, options.Commands.Update) != 1 {
 		panic(errors.New("Please select one command at a time"))
 	}
 	command := List
@@ -44,6 +45,8 @@ func main() {
 		command = Pipe
 	} else if options.Commands.Extract {
 		command = Extract
+	} else if options.Commands.Update {
+		command = Update
 	}
 
 	var globs []glob.Glob
@@ -77,7 +80,7 @@ func main() {
 		panic(err)
 	}
 
-	for i, entry := range *entries {
+	for i, entry := range entries {
 		for _, glob := range globs {
 			if glob.Match(entry.Filename) {
 				command(i, entry)
@@ -85,16 +88,23 @@ func main() {
 			}
 		}
 	}
+
+	if options.Commands.Update {
+		err = f.Save()
+		if err != nil {
+			panic(err)
+		}
+	}
 }
 
-func List(n int, entry rwd.Entry) {
+func List(n int, entry *rwd.Entry) {
 	fmt.Printf("%3d. %s (o=%d, l=%d)\n", n+1, entry.Filename, entry.Offset, entry.Length)
 }
-func Pipe(n int, entry rwd.Entry) {
+func Pipe(n int, entry *rwd.Entry) {
 	fmt.Printf("File: %s\n", entry.Filename)
 	entry.WriteTo(os.Stdout)
 }
-func Extract(n int, entry rwd.Entry) {
+func Extract(n int, entry *rwd.Entry) {
 	path, _ := filepath.Split(entry.Filename)
 
 	if len(path) > 0 {
@@ -114,6 +124,15 @@ func Extract(n int, entry rwd.Entry) {
 	if err != nil {
 		panic(err)
 	}
+}
+func Update(n int, entry *rwd.Entry) {
+	_, err := os.Stat(entry.Filename)
+	if err != nil {
+		fmt.Printf("WARNING: File '%s' does not exist.", entry.Filename)
+		return
+	}
+
+	entry.ReplaceWithFile(entry.Filename)
 }
 
 func countBools(bools ...bool) int {
