@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/a2geek/gorwd/rwd"
 	"github.com/gobwas/glob"
@@ -18,10 +19,11 @@ func main() {
 			Pipe    bool `short:"p" long:"pipe" description:"Pipe files to stdout"`
 		} `group:"Commands" required:"true"`
 
-		Filename string `short:"f" long:"file" env:"GORWD_FILENAME" description:"File to process"`
+		Filename  string `short:"f" long:"file" env:"GORWD_FILENAME" description:"File to process"`
+		Directory string `short:"d" long:"dir" description:"Write files to this directory (valid for extract only)"`
 
 		Args struct {
-			Glob []string `description:"glob patterns to match (ex: *.ttf)"`
+			Glob []string `description:"glob patterns to match (ex: *.ttf)" positional-arg-name:"file(s)"`
 		} `positional-args:"yes"`
 	}
 
@@ -57,6 +59,13 @@ func main() {
 		globs = append(globs, defaultGlob)
 	}
 
+	if len(options.Directory) > 0 {
+		err := os.Chdir(options.Directory)
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	f, err := rwd.New(options.Filename)
 	if err != nil {
 		panic(err)
@@ -86,7 +95,25 @@ func Pipe(n int, entry rwd.Entry) {
 	entry.WriteTo(os.Stdout)
 }
 func Extract(n int, entry rwd.Entry) {
-	// TODO
+	path, _ := filepath.Split(entry.Filename)
+
+	if len(path) > 0 {
+		err := os.MkdirAll(path, os.ModePerm)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	f, err := os.Create(entry.Filename)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	_, err = entry.WriteTo(f)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func countBools(bools ...bool) int {
