@@ -49,6 +49,13 @@ func main() {
 		command = Update
 	}
 
+	// This adjusts so we can use 'os.Chdir' later on
+	absolutePath, err := filepath.Abs(options.Filename)
+	if err != nil {
+		panic(err)
+	}
+	options.Filename = absolutePath
+
 	var globs []glob.Glob
 	for _, globPattern := range options.Args.Glob {
 		glob, err := glob.Compile(globPattern)
