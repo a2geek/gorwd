@@ -112,12 +112,45 @@ func (r *File) readEntry() (*Entry, error) {
 // Save will save this (modified) RWD archive back to disk.
 func (r *File) Save() error {
 	dir, _ := filepath.Split(r.file.Name())
-	newf, err := ioutil.TempFile(dir, "rwd-")
+	f, err := ioutil.TempFile(dir, "rwd-")
 	if err != nil {
 		return err
 	}
-	defer newf.Close()
+	defer f.Close()
 
+	err = r.writeFile(f)
+	if err != nil {
+		return err
+	}
+
+	err = r.Close()
+	if err != nil {
+		return err
+	}
+
+	err = os.Rename(r.file.Name(), r.file.Name()+".bak")
+	if err != nil {
+		return err
+	}
+
+	err = f.Close()
+	if err != nil {
+		return err
+	}
+
+	return os.Rename(f.Name(), r.file.Name())
+}
+
+func (r *File) SaveAs(filename string) error {
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return r.writeFile(f)
+}
+
+func (r *File) writeFile(f *os.File) error {
 	header, err := r.Header()
 	if err != nil {
 		return err
@@ -134,18 +167,18 @@ func (r *File) Save() error {
 		return err
 	}
 
-	err = binary.Write(newf, binary.LittleEndian, header)
+	err = binary.Write(f, binary.LittleEndian, header)
 	if err != nil {
 		return err
 	}
 
 	for _, entry := range entries {
-		offset, err := newf.Seek(0, io.SeekCurrent)
+		offset, err := f.Seek(0, io.SeekCurrent)
 		if err != nil {
 			return err
 		}
 
-		length, err := entry.WriteTo(newf)
+		length, err := entry.WriteTo(f)
 		if err != nil {
 			return err
 		}
@@ -156,39 +189,19 @@ func (r *File) Save() error {
 	}
 
 	var numberOfFiles int32 = int32(len(entries))
-	err = binary.Write(newf, binary.LittleEndian, &numberOfFiles)
+	err = binary.Write(f, binary.LittleEndian, &numberOfFiles)
 	if err != nil {
 		return err
 	}
 
 	for _, entry := range entries {
-		err = r.writeEntry(newf, entry)
+		err = r.writeEntry(f, entry)
 		if err != nil {
 			return err
 		}
 	}
 
-	err = binary.Write(newf, binary.LittleEndian, trailer)
-	if err != nil {
-		return err
-	}
-
-	err = r.Close()
-	if err != nil {
-		return err
-	}
-
-	err = os.Rename(r.file.Name(), r.file.Name()+".bak")
-	if err != nil {
-		return err
-	}
-
-	err = newf.Close()
-	if err != nil {
-		return err
-	}
-
-	return os.Rename(newf.Name(), r.file.Name())
+	return binary.Write(f, binary.LittleEndian, trailer)
 }
 
 func (r *File) writeEntry(f *os.File, entry *Entry) error {
