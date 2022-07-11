@@ -21,14 +21,26 @@ func main() {
 		} `group:"Commands" required:"true"`
 
 		Filename  string `short:"f" long:"file" env:"GORWD_FILENAME" description:"File to process"`
-		Directory string `short:"d" long:"dir" description:"Write files to this directory (valid for extract only)"`
+		Directory string `short:"d" long:"dir" description:"Read or write files to this directory (valid for extract only)"`
 
 		Args struct {
 			Glob []string `description:"glob patterns to match (ex: *.ttf)" positional-arg-name:"file(s)"`
 		} `positional-args:"yes"`
 	}
 
-	_, err := flags.Parse(&options)
+	parser := flags.NewParser(&options, flags.Default)
+	parser.LongDescription = `
+	This is a little utility to help manipulate RWD archive files.
+
+	The end goal is to get a utility available for those of us in Linux installing games 
+	like Kohan II using Proton for Windows emulation. Some games do not work without a 
+	little bit of additional configuration.
+
+	See https://github.com/a2geek/gorwd for more details.
+	`
+
+	//_, err := flags.Parse(&options)
+	_, err := parser.Parse()
 	if err != nil {
 		if flags.WroteHelp(err) {
 			os.Exit(0)
