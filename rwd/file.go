@@ -9,19 +9,40 @@ import (
 	"strings"
 )
 
-type File struct {
-	file *os.File
+type File interface {
+	// Close closes the RWD File, rendering it unusable for I/O.
+	// Close will return an error if it has already been called.
+	Close() error
+
+	// Header will read the header record from the RWD File.
+	// There is no caching and can be used to re-read an updated Header.
+	Header() (*Header, error)
+
+	// Trailer will read the trailer record from the RWD File.
+	// There is no caching and can be used to re-read an updated Trailer.
+	Trailer() (*Trailer, error)
+
+	// List will read a list of all Files from the RWD file.
+	List() ([]*Entry, error)
+
+	// Save will save this (modified) RWD archive back to disk.
+	Save() error
+
+	// SaveAs will save this (modified) RWD archive back to disk
+	// under a different filename.
+	SaveAs(filename string) error
 }
 
-// Close closes the RWD File, rendering it unusable for I/O.
-// Close will return an error if it has already been called.
-func (r *File) Close() error {
+type rwdFile struct {
+	file     *os.File
+	newFiles map[string]string
+}
+
+func (r *rwdFile) Close() error {
 	return r.file.Close()
 }
 
-// Header will read the header record from the RWD File.
-// There is no caching and can be used to re-read an updated Header.
-func (r *File) Header() (*Header, error) {
+func (r *rwdFile) Header() (*Header, error) {
 	_, err := r.file.Seek(0, io.SeekStart)
 	if err != nil {
 		return nil, err
@@ -34,9 +55,7 @@ func (r *File) Header() (*Header, error) {
 	return &header, nil
 }
 
-// Trailer will read the trailer record from the RWD File.
-// There is no caching and can be used to re-read an updated Trailer.
-func (r *File) Trailer() (*Trailer, error) {
+func (r *rwdFile) Trailer() (*Trailer, error) {
 	trailer := Trailer{}
 	_, err := r.file.Seek(-int64(binary.Size(trailer)), io.SeekEnd)
 	if err != nil {
@@ -49,8 +68,7 @@ func (r *File) Trailer() (*Trailer, error) {
 	return &trailer, nil
 }
 
-// List will read a list of all Files from the RWD file.
-func (r *File) List() ([]*Entry, error) {
+func (r *rwdFile) List() ([]*Entry, error) {
 	trailer, err := r.Trailer()
 	if err != nil {
 		return nil, err
@@ -78,7 +96,7 @@ func (r *File) List() ([]*Entry, error) {
 	return files, err
 }
 
-func (r *File) readEntry() (*Entry, error) {
+func (r *rwdFile) readEntry() (*Entry, error) {
 	var fileNameLength int16
 	err := binary.Read(r.file, binary.LittleEndian, &fileNameLength)
 	if err != nil {
@@ -109,8 +127,7 @@ func (r *File) readEntry() (*Entry, error) {
 	return &entry, nil
 }
 
-// Save will save this (modified) RWD archive back to disk.
-func (r *File) Save() error {
+func (r *rwdFile) Save() error {
 	dir, _ := filepath.Split(r.file.Name())
 	f, err := ioutil.TempFile(dir, "rwd-")
 	if err != nil {
@@ -141,7 +158,7 @@ func (r *File) Save() error {
 	return os.Rename(f.Name(), r.file.Name())
 }
 
-func (r *File) SaveAs(filename string) error {
+func (r *rwdFile) SaveAs(filename string) error {
 	f, err := os.Create(filename)
 	if err != nil {
 		return err
@@ -150,7 +167,7 @@ func (r *File) SaveAs(filename string) error {
 	return r.writeFile(f)
 }
 
-func (r *File) writeFile(f *os.File) error {
+func (r *rwdFile) writeFile(f *os.File) error {
 	header, err := r.Header()
 	if err != nil {
 		return err
@@ -204,7 +221,7 @@ func (r *File) writeFile(f *os.File) error {
 	return binary.Write(f, binary.LittleEndian, trailer)
 }
 
-func (r *File) writeEntry(f *os.File, entry *Entry) error {
+func (r *rwdFile) writeEntry(f *os.File, entry *Entry) error {
 	var fileNameLength int16 = int16(len(entry.Filename))
 	err := binary.Write(f, binary.LittleEndian, &fileNameLength)
 	if err != nil {

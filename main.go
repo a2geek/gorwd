@@ -39,7 +39,6 @@ func main() {
 	See https://github.com/a2geek/gorwd for more details.
 	`
 
-	//_, err := flags.Parse(&options)
 	_, err := parser.Parse()
 	if err != nil {
 		if flags.WroteHelp(err) {
@@ -151,6 +150,7 @@ func Update(n int, entry *rwd.Entry) {
 		return
 	}
 
+	fmt.Printf("Updating file '%s' in archive.\n", entry.Filename)
 	entry.ReplaceWithFile(entry.Filename)
 }
 

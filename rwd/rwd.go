@@ -11,7 +11,7 @@ import (
 var MAGIC = []byte{0x54, 0x47, 0x43, 0x4b}
 
 // New will construct an rwd.File and validate the type of file.
-func New(filename string) (*File, error) {
+func New(filename string) (File, error) {
 	f, err := os.Open(filename)
 	if err != nil {
 		return nil, err
@@ -20,7 +20,11 @@ func New(filename string) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &File{file: f}, nil
+	rwd := rwdFile{
+		file:     f,
+		newFiles: make(map[string]string),
+	}
+	return &rwd, nil
 }
 
 // CheckMagic will validate the "magic" bytes for the file signature.
