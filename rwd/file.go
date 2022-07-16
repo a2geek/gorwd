@@ -189,6 +189,11 @@ func (r *rwdFile) writeFile(f *os.File) error {
 		return err
 	}
 
+	headerEnd, err := f.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+
 	for _, entry := range entries {
 		offset, err := f.Seek(0, io.SeekCurrent)
 		if err != nil {
@@ -205,6 +210,12 @@ func (r *rwdFile) writeFile(f *os.File) error {
 		entry.Length = int32(length)
 	}
 
+	filesEnd, err := f.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+	setupSection(&trailer.Files, headerEnd, filesEnd)
+
 	var numberOfFiles int32 = int32(len(entries))
 	err = binary.Write(f, binary.LittleEndian, &numberOfFiles)
 	if err != nil {
@@ -218,7 +229,18 @@ func (r *rwdFile) writeFile(f *os.File) error {
 		}
 	}
 
+	footerEnd, err := f.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+	setupSection(&trailer.Footer, filesEnd, footerEnd)
+
 	return binary.Write(f, binary.LittleEndian, trailer)
+}
+func setupSection(section *Section, start, end int64) {
+	section.Offset = uint32(start)
+	section.Length = uint32(end) - uint32(start)
+	section.AlternateLength = section.Length
 }
 
 func (r *rwdFile) writeEntry(f *os.File, entry *Entry) error {
