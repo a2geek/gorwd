@@ -74,7 +74,7 @@ func (r *rwdFile) List() ([]*Entry, error) {
 		return nil, err
 	}
 
-	_, err = r.file.Seek(-int64(binary.Size(trailer))-int64(trailer.DirectoryLength), io.SeekEnd)
+	_, err = r.file.Seek(int64(trailer.Footer.Offset), io.SeekStart)
 	if err != nil {
 		return nil, err
 	}
