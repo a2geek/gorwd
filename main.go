@@ -12,6 +12,11 @@ import (
 	flags "github.com/jessevdk/go-flags"
 )
 
+var (
+	version   string = "tbd"
+	timestamp string = "tbd"
+)
+
 func main() {
 	var options struct {
 		Commands struct {
@@ -20,6 +25,7 @@ func main() {
 			Extract bool `short:"x" long:"extract" description:"Extract files"`
 			Pipe    bool `short:"p" long:"pipe" description:"Pipe files to stdout"`
 			Update  bool `short:"u" long:"update" description:"Update file in archive"`
+			Version bool `long:"version" description:"Show application version"`
 		} `group:"Commands" required:"true"`
 
 		Filename  string `short:"f" long:"file" env:"GORWD_FILENAME" description:"File to process"`
@@ -50,7 +56,7 @@ func main() {
 	}
 
 	// This is terrible but not grokking a better way for mutually exclusive options
-	if countBools(options.Commands.Pipe, options.Commands.Extract, options.Commands.List, options.Commands.Update, options.Commands.Info) != 1 {
+	if countBools(options.Commands.Pipe, options.Commands.Extract, options.Commands.List, options.Commands.Update, options.Commands.Info, options.Commands.Version) != 1 {
 		panic(errors.New("Please select one command at a time"))
 	}
 	command := List
@@ -60,9 +66,9 @@ func main() {
 		command = Extract
 	} else if options.Commands.Update {
 		command = Update
-	} else if options.Commands.Info {
-		// Do nothing; we do not want to run details
-		//command = Info
+	} else if options.Commands.Version {
+		fmt.Printf("Version: %s (%s)\n", version, timestamp)
+		os.Exit(0)
 	}
 
 	// This adjusts so we can use 'os.Chdir' later on
@@ -103,7 +109,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		return
+		os.Exit(0)
 	}
 
 	entries, err := f.List()
